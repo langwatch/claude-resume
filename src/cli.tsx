@@ -27,8 +27,13 @@ process.stdout.write("\x1b[?1049l");
 
 if (selection !== null) {
   const s: SessionSelection = selection;
-  execSync(`${claudeCmd} --resume "${s.sessionId}"`, {
-    stdio: "inherit",
-    cwd: s.projectPath,
-  });
+  const userShell = process.env.SHELL || "/bin/zsh";
+  // Use interactive shell (-i) to pick up user aliases from .zshrc/.bashrc
+  execSync(
+    `${userShell} -ic '${claudeCmd} --resume "${s.sessionId}"'`,
+    {
+      stdio: "inherit",
+      cwd: s.projectPath,
+    },
+  );
 }
