@@ -1,0 +1,33 @@
+{
+  "name": "claude-resume",
+  "version": "1.0.0",
+  "description": "Fast interactive session browser for Claude Code",
+  "type": "module",
+  "bin": {
+    "claude-resume": "./dist/cli.js",
+    "claude-remote-resume": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/cli.tsx",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.24.0",
+  "dependencies": {
+    "date-fns": "^4.1.0",
+    "ink": "^6.6.0",
+    "react": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.1",
+    "@types/react": "^19.0.0",
+    "ink-testing-library": "^4.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}
