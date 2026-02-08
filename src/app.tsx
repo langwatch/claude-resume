@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Box, Text, useApp, useInput } from "ink";
 import { loadAllSessions } from "./utils/sessions.js";
 import { readLastMessages } from "./utils/jsonl-reader.js";
@@ -16,6 +16,18 @@ interface Props {
   onSelect: (selection: SessionSelection) => void;
 }
 
+function matchesQuery(session: SessionDisplay, query: string): boolean {
+  const q = query.toLowerCase();
+  const fields = [
+    session.summary,
+    session.firstPrompt,
+    session.projectName,
+    session.projectPath,
+    session.gitBranch,
+  ];
+  return fields.some((f) => f && f.toLowerCase().includes(q));
+}
+
 export function App({ onSelect }: Props) {
   const { exit } = useApp();
   const [sessions, setSessions] = useState<SessionDisplay[]>([]);
@@ -26,6 +38,14 @@ export function App({ onSelect }: Props) {
     lastAssistant?: string;
   }>({});
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [searchMode, setSearchMode] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Filter sessions based on search query
+  const filteredSessions = useMemo(() => {
+    if (!searchQuery) return sessions;
+    return sessions.filter((s) => matchesQuery(s, searchQuery));
+  }, [sessions, searchQuery]);
 
   // Load all sessions on mount
   useEffect(() => {
@@ -35,10 +55,15 @@ export function App({ onSelect }: Props) {
     });
   }, []);
 
+  // Reset selection when filtered list changes
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [searchQuery]);
+
   // Load preview when selection changes
   useEffect(() => {
-    if (sessions.length === 0) return;
-    const session = sessions[selectedIndex];
+    if (filteredSessions.length === 0) return;
+    const session = filteredSessions[selectedIndex];
     if (!session) return;
 
     let cancelled = false;
@@ -53,25 +78,58 @@ export function App({ onSelect }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [selectedIndex, sessions]);
+  }, [selectedIndex, filteredSessions]);
 
   const handleSelect = useCallback(() => {
-    const session = sessions[selectedIndex];
+    const session = filteredSessions[selectedIndex];
     if (session) {
-      onSelect({ sessionId: session.sessionId, projectPath: session.projectPath });
+      onSelect({
+        sessionId: session.sessionId,
+        projectPath: session.projectPath,
+      });
       exit();
     }
-  }, [sessions, selectedIndex, onSelect, exit]);
+  }, [filteredSessions, selectedIndex, onSelect, exit]);
 
   useInput((input, key) => {
-    if (key.upArrow) {
-      setSelectedIndex((i) => Math.max(0, i - 1));
-    } else if (key.downArrow) {
-      setSelectedIndex((i) => Math.min(sessions.length - 1, i + 1));
-    } else if (key.return) {
-      handleSelect();
-    } else if (input === "q" || key.escape) {
-      exit();
+    if (searchMode) {
+      if (key.escape) {
+        setSearchMode(false);
+        setSearchQuery("");
+      } else if (key.return) {
+        setSearchMode(false);
+        if (filteredSessions.length > 0) {
+          handleSelect();
+        }
+      } else if (key.backspace || key.delete) {
+        setSearchQuery((q) => {
+          const next = q.slice(0, -1);
+          if (next === "") setSearchMode(false);
+          return next;
+        });
+      } else if (key.upArrow) {
+        setSelectedIndex((i) => Math.max(0, i - 1));
+      } else if (key.downArrow) {
+        setSelectedIndex((i) =>
+          Math.min(filteredSessions.length - 1, i + 1),
+        );
+      } else if (input && !key.ctrl && !key.meta) {
+        setSearchQuery((q) => q + input);
+      }
+    } else {
+      if (key.upArrow) {
+        setSelectedIndex((i) => Math.max(0, i - 1));
+      } else if (key.downArrow) {
+        setSelectedIndex((i) =>
+          Math.min(filteredSessions.length - 1, i + 1),
+        );
+      } else if (key.return) {
+        handleSelect();
+      } else if (input === "/" ) {
+        setSearchMode(true);
+      } else if (input === "q" || key.escape) {
+        exit();
+      }
     }
   });
 
@@ -83,17 +141,22 @@ export function App({ onSelect }: Props) {
     return <Text color="yellow">No sessions found.</Text>;
   }
 
-  // Reserve lines for header (1) + preview pane (10 + 2 border = 12) + terminal chrome buffer (3)
   const termRows = process.stdout.rows || 24;
   const maxVisible = Math.max(1, termRows - 16);
 
   return (
     <Box flexDirection="column" height={termRows} overflow="hidden">
-      <Header count={sessions.length} />
+      <Header
+        count={filteredSessions.length}
+        searchMode={searchMode}
+        searchQuery={searchQuery}
+        totalCount={sessions.length}
+      />
       <SessionList
-        sessions={sessions}
+        sessions={filteredSessions}
         selectedIndex={selectedIndex}
         maxVisible={maxVisible}
+        searchQuery={searchMode || searchQuery ? searchQuery : undefined}
       />
       <PreviewPane preview={preview} loading={previewLoading} />
     </Box>

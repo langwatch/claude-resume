@@ -6,9 +6,10 @@ interface Props {
   sessions: SessionDisplay[];
   selectedIndex: number;
   maxVisible: number;
+  searchQuery?: string;
 }
 
-export function SessionList({ sessions, selectedIndex, maxVisible }: Props) {
+export function SessionList({ sessions, selectedIndex, maxVisible, searchQuery }: Props) {
   // Calculate sliding window
   let startIndex = 0;
   if (selectedIndex >= startIndex + maxVisible) {
@@ -36,6 +37,7 @@ export function SessionList({ sessions, selectedIndex, maxVisible }: Props) {
           session={session}
           isSelected={startIndex + i === selectedIndex}
           width={width}
+          searchQuery={searchQuery}
         />
       ))}
     </Box>
