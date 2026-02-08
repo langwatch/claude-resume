@@ -182,6 +182,10 @@ export async function loadAllSessions(
     .filter((s) => !s.isSidechain)
     .filter((s) => s.messageCount > 0)
     .filter((s) => {
+      const text = s.firstPrompt || s.summary || "";
+      return !text.startsWith("<local-command-caveat>") && !text.startsWith("Caveat: The messages below");
+    })
+    .filter((s) => {
       if (seen.has(s.sessionId)) return false;
       seen.add(s.sessionId);
       return true;
