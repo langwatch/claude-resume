@@ -158,7 +158,11 @@ export function App({ onSelect }: Props) {
         maxVisible={maxVisible}
         searchQuery={searchMode || searchQuery ? searchQuery : undefined}
       />
-      <PreviewPane preview={preview} loading={previewLoading} />
+      <PreviewPane
+        preview={preview}
+        loading={previewLoading}
+        session={filteredSessions[selectedIndex]}
+      />
     </Box>
   );
 }
