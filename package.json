@@ -5,7 +5,7 @@
   "type": "module",
   "bin": {
     "claude-resume": "./dist/cli.js",
-    "claude-remote-resume": "./dist/cli.js"
+    "claude-remote-resume": "./dist/cli-remote.js"
   },
   "scripts": {
     "build": "tsc",
