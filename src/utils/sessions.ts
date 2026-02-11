@@ -80,7 +80,8 @@ async function sessionFromJsonl(
     }
 
     if (!projectPath) {
-      // Decode from directory name as fallback
+      // Fallback: decode from directory name (lossy — dashes in path
+      // components become slashes, but better than nothing)
       projectPath = "/" + dirName.replace(/^-/, "").replace(/-/g, "/");
     }
 

@@ -23,10 +23,10 @@ export function run(claudeCmd: string) {
     if (selection !== null) {
       const s: SessionSelection = selection;
       const userShell = process.env.SHELL || "/bin/zsh";
-      execSync(`${userShell} -ic '${claudeCmd} --resume "${s.sessionId}"'`, {
-        stdio: "inherit",
-        cwd: s.projectPath,
-      });
+      execSync(
+        `${userShell} -ic 'cd "${s.projectPath}" && ${claudeCmd} --resume "${s.sessionId}"'`,
+        { stdio: "inherit" },
+      );
     }
   });
 }
