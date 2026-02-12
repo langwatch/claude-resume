@@ -7,6 +7,8 @@ interface Props {
   isSelected: boolean;
   width: number;
   searchQuery?: string;
+  relevanceScore?: number;
+  maxScore?: number;
 }
 
 function HighlightedText({
@@ -66,12 +68,31 @@ function HighlightedText({
   );
 }
 
+const BAR_WIDTH = 8;
+const FILLED = "\u2588";
+const EMPTY = "\u2591";
+
+function relevanceBar(score: number, maxScore: number): string {
+  const ratio = maxScore > 0 ? score / maxScore : 0;
+  const filled = Math.round(ratio * BAR_WIDTH);
+  return FILLED.repeat(filled) + EMPTY.repeat(BAR_WIDTH - filled);
+}
+
 export function SessionRow({
   session,
   isSelected,
   width,
   searchQuery,
+  relevanceScore,
+  maxScore,
 }: Props) {
+  const hasRelevance =
+    relevanceScore !== undefined && maxScore !== undefined && maxScore > 0;
+  const barSuffix = hasRelevance
+    ? ` ${relevanceBar(relevanceScore!, maxScore!)}`
+    : "";
+  const effectiveWidth = hasRelevance ? width - BAR_WIDTH - 1 : width;
+
   const indicator = isSelected ? "\u276f" : " ";
   const time = timeAgo(session.modified);
   const project = extractProjectName(session.projectPath);
@@ -86,7 +107,7 @@ export function SessionRow({
   const prefix = `${indicator} ${timeCol} ${projectCol} `;
   const suffix = `${branch} ${msgsCol}`;
 
-  const labelMaxLen = Math.max(10, width - prefix.length - suffix.length);
+  const labelMaxLen = Math.max(10, effectiveWidth - prefix.length - suffix.length);
   const label = truncate(
     session.summary || session.firstPrompt || "(no summary)",
     labelMaxLen,
@@ -94,7 +115,10 @@ export function SessionRow({
 
   // Hard-truncate total line to terminal width
   const fullLine = `${prefix}${label}${suffix}`;
-  const line = fullLine.length > width ? fullLine.slice(0, width) : fullLine;
+  const line =
+    fullLine.length > effectiveWidth
+      ? fullLine.slice(0, effectiveWidth)
+      : fullLine;
 
   const prefixEnd = prefix.length;
   const labelEnd = prefixEnd + label.length;
@@ -137,6 +161,11 @@ export function SessionRow({
         color="gray"
         isSelected={isSelected}
       />
+      {hasRelevance && (
+        <Text color="green" dimColor={!isSelected}>
+          {barSuffix}
+        </Text>
+      )}
     </Text>
   );
 }

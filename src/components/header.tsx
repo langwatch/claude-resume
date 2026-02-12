@@ -5,9 +5,48 @@ interface Props {
   searchMode: boolean;
   searchQuery: string;
   totalCount: number;
+  deepSearching?: boolean;
+  deepSearchDone?: boolean;
+  deepSearchCount?: number;
 }
 
-export function Header({ count, searchMode, searchQuery, totalCount }: Props) {
+export function Header({
+  count,
+  searchMode,
+  searchQuery,
+  totalCount,
+  deepSearching,
+  deepSearchDone,
+  deepSearchCount,
+}: Props) {
+  if (deepSearching) {
+    return (
+      <Box>
+        <Text bold color="green">
+          Searching "{searchQuery}"...
+        </Text>
+        <Text color="gray">
+          {" "}
+          — {deepSearchCount || 0} results (Esc to cancel)
+        </Text>
+      </Box>
+    );
+  }
+
+  if (deepSearchDone) {
+    return (
+      <Box>
+        <Text bold color="green">
+          "{searchQuery}"
+        </Text>
+        <Text color="gray">
+          {" "}
+          — {deepSearchCount || 0} results (Esc to clear, Enter to resume)
+        </Text>
+      </Box>
+    );
+  }
+
   if (searchMode) {
     return (
       <Box>
@@ -16,7 +55,7 @@ export function Header({ count, searchMode, searchQuery, totalCount }: Props) {
         </Text>
         <Text color="gray">
           {" "}
-          — {count}/{totalCount} matches (Esc to clear)
+          — {count}/{totalCount} matches (Enter to deep search, Esc to clear)
         </Text>
       </Box>
     );

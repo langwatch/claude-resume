@@ -8,9 +8,55 @@ interface Props {
   preview: { lastUser?: string; lastAssistant?: string };
   loading: boolean;
   session?: SessionDisplay;
+  matchSnippets?: string[];
+  searchQuery?: string;
 }
 
-export function PreviewPane({ preview, loading, session }: Props) {
+/** Render text with query matches highlighted in yellow */
+function HighlightedSnippet({ text, query }: { text: string; query: string }) {
+  if (!query) return <Text color="gray">{text}</Text>;
+
+  const lower = text.toLowerCase();
+  const lowerQuery = query.toLowerCase();
+  const parts: { text: string; highlight: boolean }[] = [];
+  let lastIndex = 0;
+
+  let idx = lower.indexOf(lowerQuery);
+  while (idx !== -1) {
+    if (idx > lastIndex) {
+      parts.push({ text: text.slice(lastIndex, idx), highlight: false });
+    }
+    parts.push({
+      text: text.slice(idx, idx + query.length),
+      highlight: true,
+    });
+    lastIndex = idx + query.length;
+    idx = lower.indexOf(lowerQuery, lastIndex);
+  }
+  if (lastIndex < text.length) {
+    parts.push({ text: text.slice(lastIndex), highlight: false });
+  }
+
+  if (parts.length === 0) return <Text color="gray">{text}</Text>;
+
+  return (
+    <Text>
+      {parts.map((part, i) =>
+        part.highlight ? (
+          <Text key={i} backgroundColor="yellow" color="black" bold>
+            {part.text}
+          </Text>
+        ) : (
+          <Text key={i} color="gray">
+            {part.text}
+          </Text>
+        ),
+      )}
+    </Text>
+  );
+}
+
+export function PreviewPane({ preview, loading, session, matchSnippets, searchQuery }: Props) {
   const maxWidth = (process.stdout.columns || 80) - 6; // border + padding
 
   if (loading) {
@@ -27,8 +73,6 @@ export function PreviewPane({ preview, loading, session }: Props) {
     );
   }
 
-  const hasContent = preview.lastUser || preview.lastAssistant;
-
   // Header line: session ID + summary title (takes 1 line)
   const headerLine = session
     ? `${session.sessionId}${session.summary ? "  " + truncate(session.summary, maxWidth - session.sessionId.length - 2) : ""}`
@@ -36,6 +80,38 @@ export function PreviewPane({ preview, loading, session }: Props) {
   // 1 for header, 1 for blank line after header
   const headerLines = session ? 2 : 0;
   const remainingLines = PREVIEW_LINES - headerLines;
+
+  // Deep search mode: show match snippets with highlighting
+  if (matchSnippets && matchSnippets.length > 0) {
+    const snippetLines = matchSnippets.slice(0, remainingLines);
+    return (
+      <Box
+        borderStyle="single"
+        borderColor="gray"
+        flexDirection="column"
+        paddingX={1}
+        height={PREVIEW_LINES + 2}
+      >
+        {session && (
+          <>
+            <Text>
+              <Text color="gray">{truncate(headerLine, maxWidth)}</Text>
+            </Text>
+            <Text> </Text>
+          </>
+        )}
+        {snippetLines.map((snippet, i) => (
+          <HighlightedSnippet
+            key={i}
+            text={truncate(snippet, maxWidth)}
+            query={searchQuery || ""}
+          />
+        ))}
+      </Box>
+    );
+  }
+
+  const hasContent = preview.lastUser || preview.lastAssistant;
 
   // Allocate lines: 2 for user, rest for assistant
   const userLines = preview.lastUser

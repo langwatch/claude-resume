@@ -141,10 +141,20 @@ export async function loadAllSessions(
         const indexData = await fs.readFile(indexPath, "utf-8");
         const index: SessionsIndex = JSON.parse(indexData);
         if (index.entries && Array.isArray(index.entries)) {
-          for (const entry of index.entries) {
-            indexedIds.add(entry.sessionId);
-            allSessions.push(toSessionDisplay(entry));
-          }
+          await Promise.all(
+            index.entries.map(async (entry) => {
+              indexedIds.add(entry.sessionId);
+              const display = toSessionDisplay(entry);
+              // Index modified field is often stale — use file mtime instead
+              try {
+                const stat = await fs.stat(entry.fullPath);
+                display.modified = new Date(stat.mtimeMs);
+              } catch {
+                // File may have been deleted; keep index value
+              }
+              allSessions.push(display);
+            }),
+          );
         }
       } catch {
         // No index file — will scan .jsonl files below

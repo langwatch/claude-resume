@@ -7,9 +7,11 @@ interface Props {
   selectedIndex: number;
   maxVisible: number;
   searchQuery?: string;
+  scores?: Map<string, number>;
+  maxScore?: number;
 }
 
-export function SessionList({ sessions, selectedIndex, maxVisible, searchQuery }: Props) {
+export function SessionList({ sessions, selectedIndex, maxVisible, searchQuery, scores, maxScore }: Props) {
   // Calculate sliding window
   let startIndex = 0;
   if (selectedIndex >= startIndex + maxVisible) {
@@ -38,6 +40,8 @@ export function SessionList({ sessions, selectedIndex, maxVisible, searchQuery }
           isSelected={startIndex + i === selectedIndex}
           width={width}
           searchQuery={searchQuery}
+          relevanceScore={scores?.get(session.sessionId)}
+          maxScore={maxScore}
         />
       ))}
     </Box>

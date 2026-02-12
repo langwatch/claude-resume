@@ -11,6 +11,11 @@ vi.mock("../../src/utils/jsonl-reader.js", () => ({
   readLastMessages: vi.fn(),
 }));
 
+vi.mock("../../src/utils/deep-search.js", () => ({
+  deepSearch: vi.fn().mockResolvedValue(undefined),
+  extractMatchSnippets: vi.fn().mockResolvedValue([]),
+}));
+
 import { loadAllSessions } from "../../src/utils/sessions.js";
 import { readLastMessages } from "../../src/utils/jsonl-reader.js";
 import type { SessionDisplay } from "../../src/types.js";
