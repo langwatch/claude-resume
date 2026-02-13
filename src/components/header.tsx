@@ -41,21 +41,22 @@ export function Header({
         </Text>
         <Text color="gray">
           {" "}
-          — {deepSearchCount || 0} results (Esc to clear, Enter to resume)
+          — {deepSearchCount || 0} results (↓ to browse, Esc to clear)
         </Text>
       </Box>
     );
   }
 
-  if (searchMode) {
+  if (searchMode && searchQuery) {
     return (
       <Box>
         <Text bold color="yellow">
-          /{searchQuery}
+          {searchQuery}
         </Text>
         <Text color="gray">
           {" "}
-          — {count}/{totalCount} matches (Enter to deep search, Esc to clear)
+          — {count}/{totalCount} matches (↓ to browse, Enter to deep search, Esc
+          to clear)
         </Text>
       </Box>
     );
@@ -68,7 +69,8 @@ export function Header({
       </Text>
       <Text color="gray">
         {" "}
-        — {count} sessions (↑↓ navigate, / search, Enter resume, q quit)
+        — {totalCount} sessions (type to search, ↑↓ navigate, Enter resume, Esc
+        quit)
       </Text>
     </Box>
   );

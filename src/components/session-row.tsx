@@ -31,24 +31,48 @@ function HighlightedText({
   }
 
   const lowerText = text.toLowerCase();
-  const lowerQuery = query.toLowerCase();
-  const parts: { text: string; highlight: boolean }[] = [];
-  let lastIndex = 0;
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const ranges: [number, number][] = [];
 
-  let idx = lowerText.indexOf(lowerQuery);
-  while (idx !== -1) {
-    if (idx > lastIndex) {
-      parts.push({ text: text.slice(lastIndex, idx), highlight: false });
+  for (const term of terms) {
+    let idx = lowerText.indexOf(term);
+    while (idx !== -1) {
+      ranges.push([idx, idx + term.length]);
+      idx = lowerText.indexOf(term, idx + 1);
     }
-    parts.push({
-      text: text.slice(idx, idx + query.length),
-      highlight: true,
-    });
-    lastIndex = idx + query.length;
-    idx = lowerText.indexOf(lowerQuery, lastIndex);
   }
-  if (lastIndex < text.length) {
-    parts.push({ text: text.slice(lastIndex), highlight: false });
+
+  if (ranges.length === 0) {
+    return (
+      <Text color={isSelected ? "cyan" : color} bold={isSelected}>
+        {text}
+      </Text>
+    );
+  }
+
+  // Merge overlapping ranges
+  ranges.sort((a, b) => a[0] - b[0] || b[1] - a[1]);
+  const merged: [number, number][] = [ranges[0]];
+  for (let ri = 1; ri < ranges.length; ri++) {
+    const last = merged[merged.length - 1];
+    if (ranges[ri][0] <= last[1]) {
+      last[1] = Math.max(last[1], ranges[ri][1]);
+    } else {
+      merged.push(ranges[ri]);
+    }
+  }
+
+  const parts: { text: string; highlight: boolean }[] = [];
+  let cursor = 0;
+  for (const [start, end] of merged) {
+    if (start > cursor) {
+      parts.push({ text: text.slice(cursor, start), highlight: false });
+    }
+    parts.push({ text: text.slice(start, end), highlight: true });
+    cursor = end;
+  }
+  if (cursor < text.length) {
+    parts.push({ text: text.slice(cursor), highlight: false });
   }
 
   return (
@@ -113,12 +137,12 @@ export function SessionRow({
     labelMaxLen,
   );
 
-  // Hard-truncate total line to terminal width
+  // Hard-truncate and pad to effectiveWidth so relevance bar is always right-aligned
   const fullLine = `${prefix}${label}${suffix}`;
   const line =
     fullLine.length > effectiveWidth
       ? fullLine.slice(0, effectiveWidth)
-      : fullLine;
+      : fullLine.padEnd(effectiveWidth);
 
   const prefixEnd = prefix.length;
   const labelEnd = prefixEnd + label.length;

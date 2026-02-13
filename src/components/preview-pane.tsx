@@ -12,32 +12,53 @@ interface Props {
   searchQuery?: string;
 }
 
-/** Render text with query matches highlighted in yellow */
+/** Render text with query matches highlighted in yellow.
+ *  Multi-word queries highlight each word independently. */
 function HighlightedSnippet({ text, query }: { text: string; query: string }) {
   if (!query) return <Text color="gray">{text}</Text>;
 
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return <Text color="gray">{text}</Text>;
+
+  // Build a list of highlight ranges [start, end) for all term occurrences
   const lower = text.toLowerCase();
-  const lowerQuery = query.toLowerCase();
-  const parts: { text: string; highlight: boolean }[] = [];
-  let lastIndex = 0;
+  const ranges: [number, number][] = [];
 
-  let idx = lower.indexOf(lowerQuery);
-  while (idx !== -1) {
-    if (idx > lastIndex) {
-      parts.push({ text: text.slice(lastIndex, idx), highlight: false });
+  for (const term of terms) {
+    let idx = lower.indexOf(term);
+    while (idx !== -1) {
+      ranges.push([idx, idx + term.length]);
+      idx = lower.indexOf(term, idx + 1);
     }
-    parts.push({
-      text: text.slice(idx, idx + query.length),
-      highlight: true,
-    });
-    lastIndex = idx + query.length;
-    idx = lower.indexOf(lowerQuery, lastIndex);
-  }
-  if (lastIndex < text.length) {
-    parts.push({ text: text.slice(lastIndex), highlight: false });
   }
 
-  if (parts.length === 0) return <Text color="gray">{text}</Text>;
+  if (ranges.length === 0) return <Text color="gray">{text}</Text>;
+
+  // Merge overlapping ranges
+  ranges.sort((a, b) => a[0] - b[0] || b[1] - a[1]);
+  const merged: [number, number][] = [ranges[0]];
+  for (let i = 1; i < ranges.length; i++) {
+    const last = merged[merged.length - 1];
+    if (ranges[i][0] <= last[1]) {
+      last[1] = Math.max(last[1], ranges[i][1]);
+    } else {
+      merged.push(ranges[i]);
+    }
+  }
+
+  // Build parts from merged ranges
+  const parts: { text: string; highlight: boolean }[] = [];
+  let cursor = 0;
+  for (const [start, end] of merged) {
+    if (start > cursor) {
+      parts.push({ text: text.slice(cursor, start), highlight: false });
+    }
+    parts.push({ text: text.slice(start, end), highlight: true });
+    cursor = end;
+  }
+  if (cursor < text.length) {
+    parts.push({ text: text.slice(cursor), highlight: false });
+  }
 
   return (
     <Text>

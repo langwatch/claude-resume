@@ -98,15 +98,21 @@ describe("App", () => {
     await vi.waitFor(() => {
       const frame = lastFrame();
       expect(frame).toContain("Login bug fix");
-      // May be truncated depending on terminal width
       expect(frame).toContain("Dark mode implement");
       expect(frame).toContain("Auth refactoring");
     });
   });
 
-  it("shows preview pane content", async () => {
+  it("shows preview pane content after selecting a session", async () => {
     const onSelect = vi.fn();
-    const { lastFrame } = render(<App onSelect={onSelect} />);
+    const { lastFrame, stdin } = render(<App onSelect={onSelect} />);
+
+    await vi.waitFor(() => {
+      expect(lastFrame()).toContain("Login bug fix");
+    });
+
+    // Press down arrow to select first session (starts in search bar)
+    stdin.write("\x1B[B");
 
     await vi.waitFor(() => {
       const frame = lastFrame();
@@ -123,16 +129,16 @@ describe("App", () => {
       expect(lastFrame()).toContain("Login bug fix");
     });
 
-    // Press down arrow
+    // Press down twice: -1 → 0 (first session) → 1 (second session)
+    stdin.write("\x1B[B");
     stdin.write("\x1B[B");
 
     await vi.waitFor(() => {
-      // readLastMessages should be called again for the new selection
       expect(readLastMessages).toHaveBeenCalledWith("/tmp/session-2.jsonl");
     });
   });
 
-  it("calls onSelect when Enter is pressed", async () => {
+  it("calls onSelect when Enter is pressed on a session", async () => {
     const onSelect = vi.fn();
     const { stdin } = render(<App onSelect={onSelect} />);
 
@@ -143,7 +149,11 @@ describe("App", () => {
     // Small delay for state to settle
     await new Promise((r) => setTimeout(r, 50));
 
-    // Press Enter
+    // Press down arrow to select first session (starts in search bar at -1)
+    stdin.write("\x1B[B");
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Press Enter to resume
     stdin.write("\r");
 
     await vi.waitFor(() => {

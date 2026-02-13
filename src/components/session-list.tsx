@@ -12,19 +12,18 @@ interface Props {
 }
 
 export function SessionList({ sessions, selectedIndex, maxVisible, searchQuery, scores, maxScore }: Props) {
+  // selectedIndex can be -1 (search bar focused) — treat as top of list
+  const effectiveIndex = Math.max(0, selectedIndex);
+
   // Calculate sliding window
   let startIndex = 0;
-  if (selectedIndex >= startIndex + maxVisible) {
-    startIndex = selectedIndex - maxVisible + 1;
-  }
-  // Keep selected in view when scrolling up
-  if (selectedIndex < startIndex) {
-    startIndex = selectedIndex;
+  if (effectiveIndex >= startIndex + maxVisible) {
+    startIndex = effectiveIndex - maxVisible + 1;
   }
 
   // Center the selection when deep in the list
   if (sessions.length > maxVisible) {
-    startIndex = Math.max(0, selectedIndex - Math.floor(maxVisible / 2));
+    startIndex = Math.max(0, effectiveIndex - Math.floor(maxVisible / 2));
     startIndex = Math.min(startIndex, sessions.length - maxVisible);
   }
 

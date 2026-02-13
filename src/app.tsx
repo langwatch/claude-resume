@@ -34,13 +34,13 @@ export function App({ onSelect }: Props) {
   const { exit } = useApp();
   const [sessions, setSessions] = useState<SessionDisplay[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  // -1 = search bar focused, 0+ = session in list
+  const [selectedIndex, setSelectedIndex] = useState(-1);
   const [preview, setPreview] = useState<{
     lastUser?: string;
     lastAssistant?: string;
   }>({});
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [searchMode, setSearchMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
   // Deep search state
@@ -86,26 +86,31 @@ export function App({ onSelect }: Props) {
     });
   }, []);
 
-  // Reset selection when filtered list changes
+  // When search query changes, go back to search bar
   useEffect(() => {
-    setSelectedIndex(0);
+    setSelectedIndex(-1);
   }, [searchQuery]);
 
-  // Reset selection when deep results change
+  // Clamp selection when deep results change
   useEffect(() => {
-    if (isDeepMode) {
+    if (isDeepMode && selectedIndex >= 0) {
       setSelectedIndex((prev) => Math.min(prev, Math.max(0, deepResults.length - 1)));
     }
   }, [deepResults, isDeepMode]);
 
   // Derive selected session stably (by ID, not array reference)
-  const selectedSession = displaySessions[selectedIndex];
+  const inSearchBar = selectedIndex === -1;
+  const listIndex = inSearchBar ? -1 : selectedIndex;
+  const selectedSession = listIndex >= 0 ? displaySessions[listIndex] : undefined;
   const selectedSessionId = selectedSession?.sessionId;
   const selectedSessionPath = selectedSession?.fullPath;
 
   // Load preview when selection changes — keyed by session ID to avoid flicker
   useEffect(() => {
-    if (!selectedSessionId || !selectedSessionPath) return;
+    if (!selectedSessionId || !selectedSessionPath) {
+      setPreviewLoading(false);
+      return;
+    }
 
     // In deep search mode, load match snippets instead
     if (isDeepMode) {
@@ -141,7 +146,6 @@ export function App({ onSelect }: Props) {
   // Start deep search
   const startDeepSearch = useCallback(
     (query: string) => {
-      // Cancel any existing search
       abortRef.current?.abort();
 
       const controller = new AbortController();
@@ -150,8 +154,7 @@ export function App({ onSelect }: Props) {
       setDeepSearchDone(false);
       setDeepResults([]);
       setMatchSnippets([]);
-      setSelectedIndex(0);
-      setSearchMode(false);
+      setSelectedIndex(-1);
 
       deepSearch(
         sessions,
@@ -181,10 +184,11 @@ export function App({ onSelect }: Props) {
     setDeepResults([]);
     setMatchSnippets([]);
     setSearchQuery("");
-    setSelectedIndex(0);
+    setSelectedIndex(-1);
   }, []);
 
   const handleSelect = useCallback(() => {
+    if (selectedIndex < 0) return;
     const session = displaySessions[selectedIndex];
     if (session) {
       abortRef.current?.abort();
@@ -197,61 +201,64 @@ export function App({ onSelect }: Props) {
   }, [displaySessions, selectedIndex, onSelect, exit]);
 
   useInput((input, key) => {
-    // Deep search mode (results displayed, searching or done)
+    // Deep search mode
     if (isDeepMode) {
       if (key.escape) {
         cancelDeepSearch();
-      } else if (key.upArrow) {
-        setSelectedIndex((i) => Math.max(0, i - 1));
       } else if (key.downArrow) {
         setSelectedIndex((i) =>
           Math.min(displaySessions.length - 1, i + 1),
         );
+      } else if (key.upArrow) {
+        setSelectedIndex((i) => Math.max(-1, i - 1));
       } else if (key.return) {
-        handleSelect();
+        if (inSearchBar) {
+          // Re-run deep search (or no-op if same query)
+          if (searchQuery) startDeepSearch(searchQuery);
+        } else {
+          handleSelect();
+        }
+      } else if (inSearchBar) {
+        // Typing in search bar during deep results → cancel and re-filter
+        if (key.backspace || key.delete) {
+          setSearchQuery((q) => q.slice(0, -1));
+          cancelDeepSearch();
+        } else if (input && !key.ctrl && !key.meta) {
+          cancelDeepSearch();
+          setSearchQuery((q) => q + input);
+        }
       }
       return;
     }
 
-    // Live filter search mode
-    if (searchMode) {
-      if (key.escape) {
-        setSearchMode(false);
+    // Normal / search bar mode
+    if (key.escape) {
+      if (searchQuery) {
         setSearchQuery("");
-      } else if (key.return) {
-        // Enter in search mode → trigger deep search
+        setSelectedIndex(-1);
+      } else {
+        exit();
+      }
+    } else if (key.downArrow) {
+      setSelectedIndex((i) =>
+        Math.min(displaySessions.length - 1, i + 1),
+      );
+    } else if (key.upArrow) {
+      setSelectedIndex((i) => Math.max(-1, i - 1));
+    } else if (key.return) {
+      if (inSearchBar) {
+        // Enter in search bar → deep search
         if (searchQuery) {
           startDeepSearch(searchQuery);
         }
-      } else if (key.backspace || key.delete) {
-        setSearchQuery((q) => {
-          const next = q.slice(0, -1);
-          if (next === "") setSearchMode(false);
-          return next;
-        });
-      } else if (key.upArrow) {
-        setSelectedIndex((i) => Math.max(0, i - 1));
-      } else if (key.downArrow) {
-        setSelectedIndex((i) =>
-          Math.min(filteredSessions.length - 1, i + 1),
-        );
-      } else if (input && !key.ctrl && !key.meta) {
-        setSearchQuery((q) => q + input);
-      }
-    } else {
-      if (key.upArrow) {
-        setSelectedIndex((i) => Math.max(0, i - 1));
-      } else if (key.downArrow) {
-        setSelectedIndex((i) =>
-          Math.min(filteredSessions.length - 1, i + 1),
-        );
-      } else if (key.return) {
+      } else {
         handleSelect();
-      } else if (input === "/") {
-        setSearchMode(true);
-      } else if (input === "q" || key.escape) {
-        exit();
       }
+    } else if (key.backspace || key.delete) {
+      setSearchQuery((q) => q.slice(0, -1));
+    } else if (input && !key.ctrl && !key.meta) {
+      // Any printable char → type into search
+      setSearchQuery((q) => q + input);
     }
   });
 
@@ -270,7 +277,7 @@ export function App({ onSelect }: Props) {
     <Box flexDirection="column" height={termRows} overflow="hidden">
       <Header
         count={filteredSessions.length}
-        searchMode={searchMode}
+        searchMode={inSearchBar}
         searchQuery={searchQuery}
         totalCount={sessions.length}
         deepSearching={deepSearching}
@@ -281,14 +288,14 @@ export function App({ onSelect }: Props) {
         sessions={displaySessions}
         selectedIndex={selectedIndex}
         maxVisible={maxVisible}
-        searchQuery={searchMode || searchQuery ? searchQuery : undefined}
+        searchQuery={searchQuery || undefined}
         scores={scoresMap}
         maxScore={maxScore}
       />
       <PreviewPane
         preview={preview}
         loading={previewLoading}
-        session={displaySessions[selectedIndex]}
+        session={selectedSession}
         matchSnippets={isDeepMode ? matchSnippets : undefined}
         searchQuery={searchQuery}
       />
