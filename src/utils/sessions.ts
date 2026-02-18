@@ -37,7 +37,7 @@ async function sessionFromJsonl(
     const stat = await fd.stat();
     if (stat.size === 0) return null;
 
-    const readSize = Math.min(4096, stat.size);
+    const readSize = Math.min(16384, stat.size);
     const buffer = Buffer.alloc(readSize);
     await fd.read(buffer, 0, readSize, 0);
     const text = buffer.toString("utf-8");
