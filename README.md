@@ -1,10 +1,10 @@
 # claude-resume
 
-A fast, interactive terminal session browser for [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Browse and resume any of your past sessions across all projects with arrow-key navigation, live search, and message previews.
+A fast, interactive terminal session browser for [Claude Code](https://docs.anthropic.com/en/docs/claude-code). Browse, search, fork, and checkpoint any of your past sessions across all projects — with live filtering, BM25 full-text deep search, and message previews.
 
 ## Why?
 
-Claude Code's built-in `/resume` command only shows sessions for the current project and is slow to navigate. `claude-resume` shows **all sessions across all projects**, sorted by most recent, with instant message previews and vim-style search.
+Claude Code's built-in `/resume` is limited to the current project, `/checkpoint` can't go earlier than summarized context, and `/fork` UX is clunky. `claude-resume` gives you **all sessions across all projects** with powerful search, session forking, and full checkpoint control over your conversation history.
 
 ## Install
 
@@ -25,21 +25,36 @@ claude-remote-resume   # resumes with `claude-remote`
 
 | Key | Action |
 |-----|--------|
+| Type anything | Live filter by summary, project, branch |
 | `Up` / `Down` | Navigate sessions |
-| `/` | Enter search mode (filters by summary, project, branch) |
-| `Enter` | Resume the selected session |
-| `Backspace` | Delete search chars (exits search when empty) |
-| `Esc` | Clear search / quit |
-| `q` | Quit |
+| `Enter` | Resume selected session, or deep search when in search bar |
+| `Right` | Open action menu (Fork / Checkpoint) on selected session |
+| `f` | Fork (duplicate) the selected session |
+| `c` | Checkpoint — roll back to any conversation turn |
+| `Backspace` | Delete search characters |
+| `Esc` | Clear search / cancel action / quit |
+
+### Search
+
+- **Live filtering**: Just start typing — sessions are filtered instantly by summary, first prompt, project name, path, and git branch. Multi-word queries highlight each term independently.
+- **Deep search** (`Enter` in search bar): Performs a full BM25 search through the actual conversation content of all your `.jsonl` files. Results stream in ranked by relevance with recency boost, and show relevance bars and match snippets in the preview pane.
+
+### Fork & Checkpoint
+
+- **Fork** (`f` or `Right` → Fork): Duplicates the session `.jsonl` file with a new UUID. The forked session appears immediately in the list. Useful for branching a conversation without losing the original.
+- **Checkpoint** (`c` or `Right` → Checkpoint): Shows every conversation turn in a scrollable list. Select a turn and confirm to truncate the session to that point. The original file is backed up to `.jsonl.bkp` before truncation. Unlike Claude's built-in `/checkpoint`, this works on any turn — even ones before summarized context.
+
+Both actions are available in browse mode and deep search mode, and require confirmation before executing.
 
 ## How it works
 
-1. Reads `sessions-index.json` files from `~/.claude/projects/` for instant metadata, and also scans `.jsonl` files directly to catch sessions not yet indexed
-2. Merges and deduplicates sessions from all projects, sorted by last modified time
-3. When you highlight a session, reads only the **last 8KB** of the `.jsonl` conversation file to extract a preview of the last messages
-4. Uses alternate screen buffer (like vim/fzf) for clean fullscreen rendering
-5. On Enter, launches `claude --resume <sessionId>` via your shell (`$SHELL -ic`) so aliases are inherited
-6. Search with `/` filters live and highlights matches with yellow background
+1. Reads `sessions-index.json` files from `~/.claude/projects/` for instant metadata, and scans `.jsonl` files directly to catch sessions not yet indexed
+2. Uses actual file modification times (`fs.stat`) instead of stale index timestamps
+3. Merges and deduplicates sessions from all projects, sorted by most recently modified
+4. Preview pane reads the last 8KB of conversation files for quick message previews
+5. Deep search streams through `.jsonl` files newest-first, scoring with BM25 (k1=1.2, b=0.4) plus a recency boost, with prefix matching for partial terms
+6. Uses alternate screen buffer (like vim/fzf) for clean fullscreen rendering
+7. Launches `claude --resume <sessionId>` via your shell (`$SHELL -ic`) so aliases are inherited
 
 ## Development
 
