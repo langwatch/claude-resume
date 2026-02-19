@@ -16,8 +16,18 @@ vi.mock("../../src/utils/deep-search.js", () => ({
   extractMatchSnippets: vi.fn().mockResolvedValue([]),
 }));
 
+vi.mock("../../src/utils/session-ops.js", () => ({
+  forkSession: vi.fn().mockResolvedValue("new-forked-id"),
+  loadConversationTurns: vi.fn().mockResolvedValue([
+    { index: 0, lineNumber: 1, role: "user", textPreview: "hello", timestamp: "2026-01-01T00:00:00Z" },
+    { index: 1, lineNumber: 2, role: "assistant", textPreview: "hi there", timestamp: "2026-01-01T00:01:00Z" },
+  ]),
+  checkpointSession: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { loadAllSessions } from "../../src/utils/sessions.js";
 import { readLastMessages } from "../../src/utils/jsonl-reader.js";
+import { forkSession, loadConversationTurns, checkpointSession } from "../../src/utils/session-ops.js";
 import type { SessionDisplay } from "../../src/types.js";
 
 const mockSessions: SessionDisplay[] = [
@@ -171,6 +181,97 @@ describe("App", () => {
 
     await vi.waitFor(() => {
       expect(lastFrame()).toContain("No sessions found");
+    });
+  });
+
+  it("opens action menu on right arrow when session focused", async () => {
+    const onSelect = vi.fn();
+    const { lastFrame, stdin } = render(<App onSelect={onSelect} />);
+
+    await vi.waitFor(() => {
+      expect(lastFrame()).toContain("Login bug fix");
+    });
+
+    // Navigate to first session
+    stdin.write("\x1B[B");
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Press right arrow to open action menu
+    stdin.write("\x1B[C");
+    await new Promise((r) => setTimeout(r, 50));
+
+    await vi.waitFor(() => {
+      const frame = lastFrame();
+      expect(frame).toContain("Fork");
+      expect(frame).toContain("Checkpoint");
+    });
+  });
+
+  it("pressing f opens fork confirmation dialog", async () => {
+    const onSelect = vi.fn();
+    const { lastFrame, stdin } = render(<App onSelect={onSelect} />);
+
+    await vi.waitFor(() => {
+      expect(lastFrame()).toContain("Login bug fix");
+    });
+
+    // Navigate to first session
+    stdin.write("\x1B[B");
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Press f to fork
+    stdin.write("f");
+    await new Promise((r) => setTimeout(r, 50));
+
+    await vi.waitFor(() => {
+      const frame = lastFrame();
+      expect(frame).toContain("Fork session?");
+      expect(frame).toContain("Confirm");
+      expect(frame).toContain("Cancel");
+    });
+  });
+
+  it("pressing c opens checkpoint view", async () => {
+    const onSelect = vi.fn();
+    const { lastFrame, stdin } = render(<App onSelect={onSelect} />);
+
+    await vi.waitFor(() => {
+      expect(lastFrame()).toContain("Login bug fix");
+    });
+
+    // Navigate to first session
+    stdin.write("\x1B[B");
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Press c to checkpoint
+    stdin.write("c");
+    await new Promise((r) => setTimeout(r, 50));
+
+    await vi.waitFor(() => {
+      const frame = lastFrame();
+      expect(frame).toContain("Checkpoint:");
+      expect(frame).toContain("hello");
+      expect(frame).toContain("hi there");
+    });
+  });
+
+  it("f and c do not activate when in search bar", async () => {
+    const onSelect = vi.fn();
+    const { lastFrame, stdin } = render(<App onSelect={onSelect} />);
+
+    await vi.waitFor(() => {
+      expect(lastFrame()).toContain("Login bug fix");
+    });
+
+    // Type 'f' while in search bar — should filter, not fork
+    stdin.write("f");
+    await new Promise((r) => setTimeout(r, 50));
+
+    await vi.waitFor(() => {
+      const frame = lastFrame();
+      expect(frame).not.toContain("Fork session?");
+      // 'f' was added to search query — should filter
+      expect(frame).toContain("f");
     });
   });
 });

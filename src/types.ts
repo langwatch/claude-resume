@@ -50,3 +50,19 @@ export interface JsonlMessage {
   sessionId?: string;
   cwd?: string;
 }
+
+export interface ConversationTurn {
+  index: number;
+  lineNumber: number;
+  role: "user" | "assistant";
+  textPreview: string;
+  timestamp?: string;
+}
+
+export type AppMode =
+  | "browse"
+  | "deepSearch"
+  | "actionMenu"
+  | "confirmFork"
+  | "checkpoint"
+  | "confirmCheckpoint";

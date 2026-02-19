@@ -8,6 +8,8 @@ interface Props {
   deepSearching?: boolean;
   deepSearchDone?: boolean;
   deepSearchCount?: number;
+  statusMessage?: string;
+  sessionFocused?: boolean;
 }
 
 export function Header({
@@ -18,6 +20,8 @@ export function Header({
   deepSearching,
   deepSearchDone,
   deepSearchCount,
+  statusMessage,
+  sessionFocused,
 }: Props) {
   if (deepSearching) {
     return (
@@ -69,9 +73,12 @@ export function Header({
       </Text>
       <Text color="gray">
         {" "}
-        — {totalCount} sessions (type to search, ↑↓ navigate, Enter resume, Esc
-        quit)
+        — {totalCount} sessions (type to search, ↑↓ navigate, Enter resume
+        {sessionFocused ? ", → actions" : ""}, Esc quit)
       </Text>
+      {statusMessage && (
+        <Text color="green">{" "}{statusMessage}</Text>
+      )}
     </Box>
   );
 }
