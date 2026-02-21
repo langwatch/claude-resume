@@ -1,6 +1,8 @@
 import * as fs from "node:fs/promises";
+import * as fsSync from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
+import * as readline from "node:readline";
 import type {
   SessionsIndex,
   SessionIndexEntry,
@@ -26,22 +28,15 @@ function toSessionDisplay(entry: SessionIndexEntry): SessionDisplay {
   };
 }
 
-// Read the first ~4KB of a .jsonl to extract basic session metadata
+// Stream the .jsonl line-by-line to extract session metadata.
+// Stops early once a user message is found (only needs first few lines).
 async function sessionFromJsonl(
   filePath: string,
   dirName: string,
 ): Promise<SessionDisplay | null> {
-  let fd: fs.FileHandle | undefined;
   try {
-    fd = await fs.open(filePath, "r");
-    const stat = await fd.stat();
+    const stat = await fs.stat(filePath);
     if (stat.size === 0) return null;
-
-    const readSize = Math.min(16384, stat.size);
-    const buffer = Buffer.alloc(readSize);
-    await fd.read(buffer, 0, readSize, 0);
-    const text = buffer.toString("utf-8");
-    const lines = text.split("\n").filter(Boolean);
 
     let firstPrompt = "";
     let projectPath = "";
@@ -51,39 +46,52 @@ async function sessionFromJsonl(
     let isSidechain = false;
     let messageCount = 0;
 
-    for (const line of lines) {
-      try {
-        const obj: JsonlMessage & {
-          isSidechain?: boolean;
-          gitBranch?: string;
-        } = JSON.parse(line);
+    await new Promise<void>((resolve) => {
+      const stream = fsSync.createReadStream(filePath, { encoding: "utf-8" });
+      const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
 
-        if (obj.type === "user" || obj.type === "assistant") {
-          messageCount++;
-        }
+      rl.on("line", (line) => {
+        try {
+          const obj: JsonlMessage & {
+            isSidechain?: boolean;
+            gitBranch?: string;
+          } = JSON.parse(line);
 
-        if (obj.isSidechain) {
-          isSidechain = true;
-        }
+          if (obj.type === "user" || obj.type === "assistant") {
+            messageCount++;
+          }
 
-        if (obj.type === "user" && !firstPrompt) {
-          const content = extractTextContent(obj.message?.content);
-          if (content) firstPrompt = content.slice(0, 200);
-          if (obj.cwd) projectPath = obj.cwd;
-          if (obj.timestamp) created = new Date(obj.timestamp);
-          if (obj.sessionId) sessionId = obj.sessionId;
-          if (obj.gitBranch) gitBranch = obj.gitBranch;
+          if (obj.isSidechain) {
+            isSidechain = true;
+          }
+
+          if (obj.type === "user" && !firstPrompt) {
+            const content = extractTextContent(obj.message?.content);
+            if (content) firstPrompt = content.slice(0, 200);
+            if (obj.cwd) projectPath = obj.cwd;
+            if (obj.timestamp) created = new Date(obj.timestamp);
+            if (obj.sessionId) sessionId = obj.sessionId;
+            if (obj.gitBranch) gitBranch = obj.gitBranch;
+            // Found the first user message — stop reading
+            rl.close();
+            stream.destroy();
+          }
+        } catch {
+          // skip
         }
-      } catch {
-        // skip
-      }
-    }
+      });
+
+      rl.on("close", () => resolve());
+      rl.on("error", () => resolve());
+    });
 
     if (!projectPath) {
-      // Fallback: decode from directory name (lossy — dashes in path
-      // components become slashes, but better than nothing)
       projectPath = "/" + dirName.replace(/^-/, "").replace(/-/g, "/");
     }
+
+    // We only read up to the first user message, so messageCount may be 1.
+    // Set it to at least 1 if we found content.
+    if (firstPrompt && messageCount === 0) messageCount = 1;
 
     return {
       sessionId,
@@ -100,8 +108,6 @@ async function sessionFromJsonl(
     };
   } catch {
     return null;
-  } finally {
-    await fd?.close();
   }
 }
 
