@@ -23,6 +23,8 @@ vi.mock("../../src/utils/session-ops.js", () => ({
     { index: 1, lineNumber: 2, role: "assistant", textPreview: "hi there", timestamp: "2026-01-01T00:01:00Z" },
   ]),
   checkpointSession: vi.fn().mockResolvedValue(undefined),
+  moveSession: vi.fn().mockResolvedValue("/new/path/session.jsonl"),
+  getUniqueProjectPaths: vi.fn().mockReturnValue(["/Users/test/my-app", "/Users/test/other-project"]),
 }));
 
 import { loadAllSessions } from "../../src/utils/sessions.js";

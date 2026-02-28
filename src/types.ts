@@ -65,4 +65,6 @@ export type AppMode =
   | "actionMenu"
   | "confirmFork"
   | "checkpoint"
-  | "confirmCheckpoint";
+  | "confirmCheckpoint"
+  | "moveSession"
+  | "confirmMove";

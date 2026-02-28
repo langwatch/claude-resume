@@ -1,6 +1,6 @@
 import { Box } from "ink";
 import { SessionRow } from "./session-row.js";
-import { ActionMenu } from "./action-menu.js";
+import { ActionMenu, ACTIONS } from "./action-menu.js";
 import type { SessionDisplay } from "../types.js";
 
 interface Props {
@@ -18,8 +18,8 @@ export function SessionList({ sessions, selectedIndex, maxVisible, searchQuery, 
   // selectedIndex can be -1 (search bar focused) — treat as top of list
   const effectiveIndex = Math.max(0, selectedIndex);
 
-  // When action menu is open, it takes 2 extra rows
-  const menuRows = showActionMenu ? 2 : 0;
+  // When action menu is open, it takes extra rows (one per action)
+  const menuRows = showActionMenu ? ACTIONS.length : 0;
   const sessionSlots = Math.max(1, maxVisible - menuRows);
 
   // Calculate sliding window

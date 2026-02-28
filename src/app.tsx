@@ -4,12 +4,13 @@ import { loadAllSessions } from "./utils/sessions.js";
 import { readLastMessages } from "./utils/jsonl-reader.js";
 import { deepSearch, extractMatchSnippets } from "./utils/deep-search.js";
 import type { SearchResult } from "./utils/deep-search.js";
-import { forkSession, loadConversationTurns, checkpointSession } from "./utils/session-ops.js";
+import { forkSession, loadConversationTurns, checkpointSession, moveSession, getUniqueProjectPaths } from "./utils/session-ops.js";
 import { SessionList } from "./components/session-list.js";
 import { PreviewPane } from "./components/preview-pane.js";
 import { Header } from "./components/header.js";
 import { CheckpointView } from "./components/checkpoint-view.js";
 import { ConfirmDialog } from "./components/confirm-dialog.js";
+import { MovePicker } from "./components/move-picker.js";
 import { ACTIONS } from "./components/action-menu.js";
 import type { SessionDisplay, ConversationTurn, AppMode } from "./types.js";
 
@@ -65,11 +66,23 @@ export function App({ onSelect }: Props) {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const statusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Move state
+  const [moveTargetIndex, setMoveTargetIndex] = useState(0);
+  const [moveTypingMode, setMoveTypingMode] = useState(false);
+  const [moveCustomPath, setMoveCustomPath] = useState("");
+  const [moveTargetPath, setMoveTargetPath] = useState("");
+
   // Filter sessions based on search query
   const filteredSessions = useMemo(() => {
     if (!searchQuery) return sessions;
     return sessions.filter((s) => matchesQuery(s, searchQuery));
   }, [sessions, searchQuery]);
+
+  // Unique project paths for move picker
+  const uniqueProjectPaths = useMemo(
+    () => getUniqueProjectPaths(sessions),
+    [sessions],
+  );
 
   // Determine which session list to display
   const isDeepMode = deepSearching || deepSearchDone;
@@ -216,6 +229,10 @@ export function App({ onSelect }: Props) {
     setCheckpointSessionState(null);
     setCheckpointLoading(false);
     setConfirmSelected(1);
+    setMoveTargetIndex(0);
+    setMoveTypingMode(false);
+    setMoveCustomPath("");
+    setMoveTargetPath("");
   }, []);
 
   const reloadSessions = useCallback(() => {
@@ -264,6 +281,29 @@ export function App({ onSelect }: Props) {
       });
   }, [checkpointTurns, checkpointIndex, checkpointSessionState, showStatus, reloadSessions, resetMode]);
 
+  const enterMoveMode = useCallback(() => {
+    setMoveTargetIndex(0);
+    setMoveTypingMode(false);
+    setMoveCustomPath("");
+    setMoveTargetPath("");
+    setMode("moveSession");
+  }, []);
+
+  const executeMove = useCallback(() => {
+    const session = displaySessions[selectedIndex];
+    if (!session || !moveTargetPath) return;
+    moveSession(session.fullPath, moveTargetPath)
+      .then(() => {
+        showStatus(`Moved to ${moveTargetPath}`);
+        reloadSessions();
+        resetMode();
+      })
+      .catch((err: Error) => {
+        showStatus(`Move failed: ${err.message}`);
+        resetMode();
+      });
+  }, [displaySessions, selectedIndex, moveTargetPath, showStatus, reloadSessions, resetMode]);
+
   const handleSelect = useCallback(() => {
     if (selectedIndex < 0) return;
     const session = displaySessions[selectedIndex];
@@ -278,6 +318,81 @@ export function App({ onSelect }: Props) {
   }, [displaySessions, selectedIndex, onSelect, exit]);
 
   useInput((input, key) => {
+    // Move session: project picker
+    if (mode === "moveSession") {
+      if (key.escape) {
+        if (moveTypingMode) {
+          setMoveTypingMode(false);
+          setMoveCustomPath("");
+        } else {
+          resetMode();
+        }
+        return;
+      }
+      if (moveTypingMode) {
+        if (key.return && moveCustomPath.trim()) {
+          setMoveTargetPath(moveCustomPath.trim());
+          setConfirmSelected(1);
+          setMode("confirmMove");
+        } else if (key.backspace || key.delete) {
+          setMoveCustomPath((p) => p.slice(0, -1));
+        } else if (input && !key.ctrl && !key.meta) {
+          setMoveCustomPath((p) => p + input);
+        }
+        return;
+      }
+      // List mode
+      if (input === "/" || input === "t") {
+        setMoveTypingMode(true);
+        return;
+      }
+      if (key.downArrow) {
+        setMoveTargetIndex((i) => Math.min(uniqueProjectPaths.length - 1, i + 1));
+        return;
+      }
+      if (key.upArrow) {
+        setMoveTargetIndex((i) => Math.max(0, i - 1));
+        return;
+      }
+      if (key.return) {
+        const targetPath = uniqueProjectPaths[moveTargetIndex];
+        if (targetPath) {
+          setMoveTargetPath(targetPath);
+          setConfirmSelected(1);
+          setMode("confirmMove");
+        }
+        return;
+      }
+      return;
+    }
+
+    // Confirm move dialog
+    if (mode === "confirmMove") {
+      if (key.escape || input === "n" || input === "N") {
+        setMode("moveSession");
+        setConfirmSelected(1);
+        return;
+      }
+      if (input === "y" || input === "Y") {
+        executeMove();
+        return;
+      }
+      if (key.return) {
+        if (confirmSelected === 0) {
+          executeMove();
+        } else {
+          setMode("moveSession");
+        }
+        setConfirmSelected(1);
+        return;
+      }
+      if (key.leftArrow || key.rightArrow || key.upArrow || key.downArrow || key.tab) {
+        setConfirmSelected((s) => (s === 0 ? 1 : 0));
+        return;
+      }
+      return;
+    }
+
     // Confirm dialog mode (fork or checkpoint)
     if (mode === "confirmFork" || mode === "confirmCheckpoint") {
       if (key.escape || input === "n" || input === "N") {
@@ -343,8 +458,12 @@ export function App({ onSelect }: Props) {
         resetMode();
         return;
       }
-      if (key.downArrow || key.upArrow) {
-        setActionMenuIndex((i) => (i === 0 ? 1 : 0));
+      if (key.downArrow) {
+        setActionMenuIndex((i) => Math.min(ACTIONS.length - 1, i + 1));
+        return;
+      }
+      if (key.upArrow) {
+        setActionMenuIndex((i) => Math.max(0, i - 1));
         return;
       }
       if (key.leftArrow) {
@@ -359,6 +478,8 @@ export function App({ onSelect }: Props) {
         } else if (action === "Checkpoint") {
           const session = displaySessions[selectedIndex];
           if (session) enterCheckpointMode(session);
+        } else if (action === "Move") {
+          enterMoveMode();
         }
         return;
       }
@@ -390,6 +511,8 @@ export function App({ onSelect }: Props) {
       } else if (input === "c" && selectedIndex >= 0) {
         const session = displaySessions[selectedIndex];
         if (session) enterCheckpointMode(session);
+      } else if (input === "m" && selectedIndex >= 0) {
+        enterMoveMode();
       } else if (inSearchBar) {
         if (key.backspace || key.delete) {
           setSearchQuery((q) => q.slice(0, -1));
@@ -434,6 +557,8 @@ export function App({ onSelect }: Props) {
     } else if (input === "c" && selectedIndex >= 0) {
       const session = displaySessions[selectedIndex];
       if (session) enterCheckpointMode(session);
+    } else if (input === "m" && selectedIndex >= 0) {
+      enterMoveMode();
     } else if (key.backspace || key.delete) {
       setSearchQuery((q) => q.slice(0, -1));
     } else if (input && !key.ctrl && !key.meta) {
@@ -473,6 +598,35 @@ export function App({ onSelect }: Props) {
         message={`Keep turns 1-${turn ? turn.index + 1 : 0}, delete turns ${turn ? turn.index + 2 : 0}-${checkpointTurns.length}. A .bkp backup will be saved.`}
         selectedButton={confirmSelected}
       />
+    );
+  }
+
+  // Confirm move dialog
+  if (mode === "confirmMove") {
+    return (
+      <ConfirmDialog
+        title="Move session?"
+        message={`Move to: ${moveTargetPath}`}
+        selectedButton={confirmSelected}
+      />
+    );
+  }
+
+  // Move picker
+  if (mode === "moveSession") {
+    const session = displaySessions[selectedIndex];
+    return (
+      <Box flexDirection="column" height={termRows} overflow="hidden">
+        <MovePicker
+          projectPaths={uniqueProjectPaths}
+          selectedIndex={moveTargetIndex}
+          maxVisible={termRows - 2}
+          sessionSummary={session?.summary || ""}
+          currentProjectPath={session?.projectPath || ""}
+          typingMode={moveTypingMode}
+          customPath={moveCustomPath}
+        />
+      </Box>
     );
   }
 

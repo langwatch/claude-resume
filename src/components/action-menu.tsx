@@ -1,6 +1,6 @@
 import { Box, Text } from "ink";
 
-const ACTIONS = ["Fork", "Checkpoint"] as const;
+const ACTIONS = ["Fork", "Checkpoint", "Move"] as const;
 export type ActionType = (typeof ACTIONS)[number];
 
 interface Props {

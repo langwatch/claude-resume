@@ -6,7 +6,10 @@ import {
   forkSession,
   loadConversationTurns,
   checkpointSession,
+  moveSession,
+  getUniqueProjectPaths,
 } from "../../src/utils/session-ops.js";
+import type { SessionDisplay } from "../../src/types.js";
 
 let tmpDir: string;
 
@@ -203,5 +206,83 @@ describe("checkpointSession", () => {
     const bkpContent = fs.readFileSync(bkpPath, "utf-8");
     expect(bkpContent).not.toBe("old backup content");
     expect(bkpContent.split("\n").filter(Boolean)).toHaveLength(3);
+  });
+});
+
+describe("moveSession", () => {
+  it("moves file to target project directory and updates cwd", async () => {
+    // Simulate ~/.claude/projects/source-dir/session.jsonl
+    const sourceDir = path.join(tmpDir, ".claude", "projects", "-tmp-source");
+    fs.mkdirSync(sourceDir, { recursive: true });
+
+    const sessionId = "move-test-session";
+    const filePath = path.join(sourceDir, `${sessionId}.jsonl`);
+    const lines = [
+      makeJsonlLine("user", "hello", sessionId, null),
+      makeJsonlLine("assistant", "hi", sessionId, "u1"),
+    ];
+    fs.writeFileSync(filePath, lines.join("\n") + "\n");
+
+    // Mock os.homedir by using a custom projects dir
+    // moveSession uses os.homedir(), so we test the function behavior
+    const newProjectPath = "/new/project/path";
+    const resultPath = await moveSession(filePath, newProjectPath);
+
+    // Original file should be gone
+    expect(fs.existsSync(filePath)).toBe(false);
+
+    // Backup should exist
+    expect(fs.existsSync(filePath + ".bkp")).toBe(true);
+
+    // New file should exist at result path
+    expect(fs.existsSync(resultPath)).toBe(true);
+
+    // cwd should be updated in all lines
+    const newContent = fs.readFileSync(resultPath, "utf-8");
+    for (const line of newContent.split("\n").filter(Boolean)) {
+      const obj = JSON.parse(line);
+      expect(obj.cwd).toBe(newProjectPath);
+    }
+  });
+
+  it("removes entry from source sessions-index.json", async () => {
+    const sourceDir = path.join(tmpDir, ".claude", "projects", "-tmp-src2");
+    fs.mkdirSync(sourceDir, { recursive: true });
+
+    const sessionId = "indexed-session";
+    const filePath = path.join(sourceDir, `${sessionId}.jsonl`);
+    fs.writeFileSync(filePath, makeJsonlLine("user", "hi", sessionId, null) + "\n");
+
+    // Create sessions-index.json with this session
+    const indexPath = path.join(sourceDir, "sessions-index.json");
+    fs.writeFileSync(indexPath, JSON.stringify({
+      version: 1,
+      entries: [
+        { sessionId, fullPath: filePath },
+        { sessionId: "other-session", fullPath: "/other" },
+      ],
+    }));
+
+    await moveSession(filePath, "/new/path");
+
+    // Index should no longer contain the moved session
+    const updatedIndex = JSON.parse(fs.readFileSync(indexPath, "utf-8"));
+    expect(updatedIndex.entries).toHaveLength(1);
+    expect(updatedIndex.entries[0].sessionId).toBe("other-session");
+  });
+});
+
+describe("getUniqueProjectPaths", () => {
+  it("returns sorted deduplicated project paths", () => {
+    const sessions = [
+      { projectPath: "/b/project" },
+      { projectPath: "/a/project" },
+      { projectPath: "/b/project" },
+      { projectPath: "" },
+      { projectPath: "/c/project" },
+    ] as SessionDisplay[];
+
+    const paths = getUniqueProjectPaths(sessions);
+    expect(paths).toEqual(["/a/project", "/b/project", "/c/project"]);
   });
 });
